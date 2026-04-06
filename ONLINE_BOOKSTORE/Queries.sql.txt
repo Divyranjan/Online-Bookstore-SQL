@@ -1,0 +1,238 @@
+-- ============================================
+-- 📚 Online Bookstore Data Analysis Project
+-- ============================================
+-- This project demonstrates SQL skills including:
+-- - Data import using CSV
+-- - Filtering and aggregation
+-- - Joins and relationships
+-- - Window functions (DENSE_RANK)
+-- - Real-world business queries
+-- ============================================
+
+
+-- ============================================
+-- 1. DATABASE SETUP
+-- ============================================
+
+-- Create Books Table
+CREATE TABLE IF NOT EXISTS Books (
+    Book_ID INT PRIMARY KEY,
+    Title VARCHAR(100),
+    Author VARCHAR(100),
+    Genre VARCHAR(50),
+    Published_Year INT,
+    Price NUMERIC(10,2),
+    Stock INT
+);
+
+-- Load Books Data
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/Books.csv'
+INTO TABLE Books
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(Book_ID, Title, Author, Genre, Published_Year, Price, Stock);
+
+
+-- Create Customers Table
+CREATE TABLE IF NOT EXISTS Customers (
+    Customer_ID INT PRIMARY KEY,
+    Name VARCHAR(100),
+    Email VARCHAR(100),
+    Phone VARCHAR(15),
+    City VARCHAR(50),
+    Country VARCHAR(150)
+);
+
+-- Load Customers Data
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/Customers.csv'
+INTO TABLE Customers
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(Customer_ID, Name, Email, Phone, City, Country);
+
+
+-- Create Orders Table
+CREATE TABLE IF NOT EXISTS Orders (
+    Order_ID INT PRIMARY KEY,
+    Customer_ID INT,
+    Book_ID INT,
+    Order_Date DATE,
+    Quantity INT,
+    Total_Amount NUMERIC(10,2),
+    FOREIGN KEY (Customer_ID) REFERENCES Customers(Customer_ID),
+    FOREIGN KEY (Book_ID) REFERENCES Books(Book_ID)
+);
+
+-- Load Orders Data
+LOAD DATA INFILE 'C:/ProgramData/MySQL/MySQL Server 8.0/Uploads/Orders.csv'
+INTO TABLE Orders
+FIELDS TERMINATED BY ',' 
+ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 ROWS
+(Order_ID, Customer_ID, Book_ID, Order_Date, Quantity, Total_Amount);
+
+
+-- ============================================
+-- 2. BASIC QUERIES
+-- ============================================
+
+-- Q1: Retrieve all Fiction books
+SELECT * 
+FROM Books 
+WHERE Genre = 'Fiction';
+
+-- Q2: Find books published after 1950
+SELECT * 
+FROM Books 
+WHERE Published_Year > 1950;
+
+-- Q3: List customers from Canada
+SELECT * 
+FROM Customers 
+WHERE Country LIKE '%Canada%';
+
+-- Q4: Find orders placed in September 2023
+SELECT * 
+FROM Orders 
+WHERE Order_Date LIKE '2023-09%';
+
+-- Q5: Calculate total stock available
+SELECT SUM(Stock) AS total_stock
+FROM Books;
+
+
+-- ============================================
+-- 3. INTERMEDIATE QUERIES
+-- ============================================
+
+-- Q6: Find the most expensive book
+SELECT * 
+FROM (
+    SELECT *, DENSE_RANK() OVER (ORDER BY Price DESC) AS rn
+    FROM Books
+) b
+WHERE rn = 1;
+
+-- Q7: Find orders with quantity > 1
+SELECT * 
+FROM Orders 
+WHERE Quantity > 1;
+
+-- Q8: Find orders with total amount > 20
+SELECT * 
+FROM Orders 
+WHERE Total_Amount > 20;
+
+-- Q9: List all unique genres
+SELECT DISTINCT Genre 
+FROM Books;
+
+-- Q10: Find least stocked book
+SELECT * 
+FROM (
+    SELECT *, DENSE_RANK() OVER (ORDER BY Stock ASC) AS rn
+    FROM Books
+) b
+WHERE rn = 1;
+
+-- Q11: Calculate total revenue
+SELECT SUM(Total_Amount) AS total_revenue
+FROM Orders;
+
+
+-- ============================================
+-- 4. ADVANCED QUERIES
+-- ============================================
+
+-- Q12: Total quantity sold per genre
+SELECT 
+    Genre, 
+    SUM(o.Quantity) AS total_quantity
+FROM Books b 
+JOIN Orders o ON b.Book_ID = o.Book_ID
+GROUP BY Genre;
+
+-- Q13: Average price of Fantasy books
+SELECT AVG(Price) AS avg_price
+FROM Books
+WHERE LOWER(Genre) = 'fantasy';
+
+-- Q14: Customers with at least 2 orders
+SELECT 
+    c.Name, 
+    COUNT(*) AS total_orders
+FROM Customers c 
+JOIN Orders o ON o.Customer_ID = c.Customer_ID
+GROUP BY c.Customer_ID, c.Name
+HAVING COUNT(*) >= 2;
+
+-- Q15: Most frequently ordered book
+SELECT 
+    b.Title,
+    o.book_id,
+    o.cn AS order_count
+FROM (
+    SELECT 
+        book_id,
+        COUNT(*) AS cn,
+        DENSE_RANK() OVER (ORDER BY COUNT(*) DESC) AS rn
+    FROM Orders
+    GROUP BY book_id
+) o 
+JOIN Books b ON o.book_id = b.book_id
+WHERE rn = 1;
+
+-- Q16: Top 3 most expensive Fantasy books
+SELECT title, price
+FROM (
+    SELECT 
+        title,
+        price,
+        DENSE_RANK() OVER (ORDER BY price DESC) AS rn
+    FROM Books
+    WHERE LOWER(Genre) = 'fantasy'
+) b
+WHERE rn <= 3;
+
+-- Q17: Total books sold per author
+SELECT 
+    b.Author,
+    SUM(o.Quantity) AS total_quantity
+FROM Orders o
+JOIN Books b ON b.Book_ID = o.Book_ID
+GROUP BY b.Author;
+
+-- Q18: Orders above 30 with customer city
+SELECT 
+    c.City, 
+    o.Total_Amount
+FROM Customers c
+JOIN Orders o ON c.Customer_ID = o.Customer_ID
+WHERE o.Total_Amount > 30;
+
+-- Q19: Top spending customer
+SELECT customer_id, total_spent
+FROM (
+    SELECT 
+        c.customer_id,
+        SUM(o.total_amount) AS total_spent,
+        DENSE_RANK() OVER (ORDER BY SUM(o.total_amount) DESC) AS rn
+    FROM Orders o 
+    JOIN Customers c ON c.customer_id = o.customer_id
+    GROUP BY c.customer_id
+) e
+WHERE rn = 1;
+
+-- Q20: Remaining stock after orders
+SELECT 
+    b.book_id,
+    b.title,
+    b.stock - COALESCE(SUM(o.quantity), 0) AS stock_left
+FROM Books b
+LEFT JOIN Orders o ON b.book_id = o.book_id
+GROUP BY b.book_id, b.title, b.stock;
